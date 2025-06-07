@@ -527,7 +527,7 @@ fn ui(f: &mut Frame, app: &mut App) {
                 rows.push(Row::new(vec![
                     Cell::from(format!("  └─ {} - {}", commit.hash, commit.message)),
                     Cell::from(commit.author.clone()),
-                    Cell::from(""),
+                    Cell::from(commit.timestamp.format("%m/%d %H:%M").to_string()),
                     Cell::from(format!("({})", commit.branch)),
                 ]).style(Style::default().fg(Color::Gray)));
             }
