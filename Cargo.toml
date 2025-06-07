@@ -1,7 +1,13 @@
 [package]
-name = "git-monitor"
+name = "gitop"
 version = "0.1.0"
 edition = "2024"
+description = "A terminal-based git repository monitor with real-time status updates"
+authors = ["Alan Tokarsky <alantokarsky@gmail.com>"]
+license = "MIT"
+readme = "README.md"
+keywords = ["git", "monitor", "terminal", "tui", "cli"]
+categories = ["command-line-utilities", "development-tools"]
 
 [dependencies]
 ratatui = "0.26"

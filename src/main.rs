@@ -287,7 +287,7 @@ impl App {
 
 fn load_config() -> Result<Config> {
     // Try to load from config file, fallback to default
-    let config_path = "git-monitor.toml";
+    let config_path = "gitop.toml";
     
     if std::path::Path::new(config_path).exists() {
         let content = std::fs::read_to_string(config_path)?;
@@ -438,7 +438,7 @@ async fn monitor_repositories(
                         console_guard.push(ConsoleMessage {
                             timestamp: Utc::now(),
                             repo: repo.name.clone(),
-                            author: "Git Monitor".to_string(),
+                            author: "GitOp".to_string(),
                             message: "Repository is now up to date! 🎉".to_string(),
                         });
                     }
@@ -542,7 +542,7 @@ fn ui(f: &mut Frame, app: &mut App) {
     ];
     
     let table = Table::new(rows, widths)
-        .block(Block::default().title("Git Repositories").borders(Borders::ALL))
+        .block(Block::default().title("GitOp - Repositories").borders(Borders::ALL))
         .header(Row::new(vec!["Repository", "Ahead", "Behind", "Branch"])
             .style(Style::default().add_modifier(Modifier::BOLD)))
         .highlight_style(Style::default().add_modifier(Modifier::REVERSED).fg(Color::White));
@@ -639,7 +639,7 @@ async fn main() -> Result<()> {
         console_guard.push(ConsoleMessage {
             timestamp: Utc::now(),
             repo: "System".to_string(),
-            author: "Git Monitor".to_string(),
+            author: "GitOp".to_string(),
             message: format!("Started monitoring {} repositories", repos.len()),
         });
         

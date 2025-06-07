@@ -33,7 +33,7 @@ path = "/home/alantokarsky/src/config"
 remote = "origin"
 
 [[repositories]]
-name = "git-montitor"
-path = "~/src/git-monitor"
+name = "gitop"
+path = "~/src/gitop"
 remote = "origin"
 
