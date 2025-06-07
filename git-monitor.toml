@@ -12,22 +12,16 @@ max_commits = 5       # number of commits to show when expanded
 #   - RGB hex: "#FF5500" or "FF5500" (custom RGB colors)
 #
 # Default colors if not specified:
-#   - ahead_color: "yellow"      (for ↑5 arrows when ahead)
-#   - behind_color: "cyan"       (for ↓3 arrows when behind)  
-#   - flash_red_color: "red"     (when new changes detected)
-#   - flash_green_color: "green" (when repository becomes up-to-date)
+#   - ahead_color: "yellow"  (for ↑5 arrows when ahead)
+#   - behind_color: "cyan"   (for ↓3 arrows when behind)
 
 [colors]
-ahead_color = "yellow"        # Color for ahead count (↑5)
-behind_color = "cyan"         # Color for behind count (↓3)
-flash_red_color = "red"       # Flash color for new changes (30s fade)
-flash_green_color = "green"   # Flash color when up-to-date (5s fade)
+ahead_color = "yellow"   # Text color for ahead count (↑5)
+behind_color = "cyan"    # Text color for behind count (↓3)
 
 # Examples of other colors you could use:
 # ahead_color = "lightgreen"
 # behind_color = "lightred" 
-# flash_red_color = "#FF5500"  # Custom orange
-# flash_green_color = "lightgreen"
 
 # Repository Configuration
 # Examples of different path formats (no trailing slash needed):
