@@ -27,6 +27,15 @@ struct Config {
     repositories: Vec<RepoConfig>,
     refresh_interval: u64, // seconds
     max_commits: usize,    // number of commits to show when expanded
+    colors: Option<ColorConfig>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct ColorConfig {
+    ahead_color: Option<String>,     // Color for ahead count arrows
+    behind_color: Option<String>,    // Color for behind count arrows  
+    flash_red_color: Option<String>, // Color for red flash (new changes)
+    flash_green_color: Option<String>, // Color for green flash (up to date)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -73,6 +82,64 @@ struct App {
     table_state: TableState,
     should_quit: bool,
     max_commits: usize,
+    colors: ColorConfig,
+}
+
+fn parse_color(color_str: &str) -> Color {
+    match color_str.to_lowercase().as_str() {
+        "black" => Color::Black,
+        "red" => Color::Red,
+        "green" => Color::Green,
+        "yellow" => Color::Yellow,
+        "blue" => Color::Blue,
+        "magenta" => Color::Magenta,
+        "cyan" => Color::Cyan,
+        "gray" | "grey" => Color::Gray,
+        "darkgray" | "darkgrey" => Color::DarkGray,
+        "lightred" => Color::LightRed,
+        "lightgreen" => Color::LightGreen,
+        "lightyellow" => Color::LightYellow,
+        "lightblue" => Color::LightBlue,
+        "lightmagenta" => Color::LightMagenta,
+        "lightcyan" => Color::LightCyan,
+        "white" => Color::White,
+        "reset" | "default" | "normal" => Color::Reset,
+        _ => {
+            // Try to parse as RGB hex (e.g., "#FF5500" or "FF5500")
+            let hex = color_str.trim_start_matches('#');
+            if hex.len() == 6 {
+                if let (Ok(r), Ok(g), Ok(b)) = (
+                    u8::from_str_radix(&hex[0..2], 16),
+                    u8::from_str_radix(&hex[2..4], 16),
+                    u8::from_str_radix(&hex[4..6], 16),
+                ) {
+                    return Color::Rgb(r, g, b);
+                }
+            }
+            // Default to reset if parsing fails
+            Color::Reset
+        }
+    }
+}
+
+fn expand_path(path: &str) -> PathBuf {
+    if path.starts_with('~') {
+        // Try HOME first (Unix/Linux), then USERPROFILE (Windows)
+        if let Some(home) = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")) {
+            let mut home_path = PathBuf::from(home);
+            // Handle both "~/" and "~" cases
+            if path.len() > 1 && path.chars().nth(1) == Some('/') {
+                home_path.push(&path[2..]); // Skip "~/"
+            } else if path.len() > 1 {
+                home_path.push(&path[1..]); // Skip "~"
+            }
+            home_path
+        } else {
+            PathBuf::from(path)
+        }
+    } else {
+        PathBuf::from(path)
+    }
 }
 
 impl App {
@@ -96,6 +163,14 @@ impl App {
 
         let repos_empty = repos.is_empty();
         
+        // Set up colors with defaults
+        let colors = config.colors.unwrap_or(ColorConfig {
+            ahead_color: Some("yellow".to_string()),
+            behind_color: Some("cyan".to_string()),
+            flash_red_color: Some("red".to_string()),
+            flash_green_color: Some("green".to_string()),
+        });
+        
         Self {
             repos: Arc::new(Mutex::new(repos)),
             console_messages: Arc::new(Mutex::new(Vec::new())),
@@ -108,6 +183,7 @@ impl App {
             },
             should_quit: false,
             max_commits: config.max_commits,
+            colors,
         }
     }
 
@@ -217,26 +293,6 @@ impl App {
     }
 }
 
-fn expand_path(path: &str) -> PathBuf {
-    if path.starts_with('~') {
-        // Try HOME first (Unix/Linux), then USERPROFILE (Windows)
-        if let Some(home) = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")) {
-            let mut home_path = PathBuf::from(home);
-            // Handle both "~/" and "~" cases
-            if path.len() > 1 && path.chars().nth(1) == Some('/') {
-                home_path.push(&path[2..]); // Skip "~/"
-            } else if path.len() > 1 {
-                home_path.push(&path[1..]); // Skip "~"
-            }
-            home_path
-        } else {
-            PathBuf::from(path)
-        }
-    } else {
-        PathBuf::from(path)
-    }
-}
-
 fn load_config() -> Result<Config> {
     // Try to load from config file, fallback to default
     let config_path = "git-monitor.toml";
@@ -256,6 +312,12 @@ fn load_config() -> Result<Config> {
             ],
             refresh_interval: 5,
             max_commits: 5,
+            colors: Some(ColorConfig {
+                ahead_color: Some("yellow".to_string()),
+                behind_color: Some("cyan".to_string()),
+                flash_red_color: Some("red".to_string()),
+                flash_green_color: Some("green".to_string()),
+            }),
         })
     }
 }
@@ -328,6 +390,8 @@ async fn monitor_repositories(
     repos: Arc<Mutex<Vec<RepoStatus>>>,
     console_messages: Arc<Mutex<Vec<ConsoleMessage>>>,
     refresh_interval: Duration,
+    flash_red_color: Color,
+    flash_green_color: Color,
 ) {
     let mut interval = time::interval(refresh_interval);
     
@@ -350,16 +414,53 @@ async fn monitor_repositories(
                     repo.behind = behind;
                     repo.current_branch = branch;
                     
-                    // Flash red if new commits behind
-                    if behind > prev_behind {
+                    // Flash red if new commits behind or ahead
+                    if behind > prev_behind || ahead > prev_ahead {
                         repo.flash_until = Some(Instant::now() + Duration::from_secs(30));
-                        repo.flash_color = Some(Color::Red);
+                        repo.flash_color = Some(flash_red_color);
+                        
+                        // Add console message about the change
+                        let mut console_guard = console_messages.lock().unwrap();
+                        if behind > prev_behind && ahead > prev_ahead {
+                            console_guard.push(ConsoleMessage {
+                                timestamp: Utc::now(),
+                                repo: repo.name.clone(),
+                                author: "Git Monitor".to_string(),
+                                message: format!("Status changed: {} ahead (+{}), {} behind (+{})", 
+                                    ahead, ahead - prev_ahead, behind, behind - prev_behind),
+                            });
+                        } else if behind > prev_behind {
+                            console_guard.push(ConsoleMessage {
+                                timestamp: Utc::now(),
+                                repo: repo.name.clone(),
+                                author: "Git Monitor".to_string(),
+                                message: format!("New commits available: {} behind (+{})", 
+                                    behind, behind - prev_behind),
+                            });
+                        } else if ahead > prev_ahead {
+                            console_guard.push(ConsoleMessage {
+                                timestamp: Utc::now(),
+                                repo: repo.name.clone(),
+                                author: "Git Monitor".to_string(),
+                                message: format!("Local commits added: {} ahead (+{})", 
+                                    ahead, ahead - prev_ahead),
+                            });
+                        }
                     }
                     
-                    // Flash green if pulled (behind went to 0)
-                    if prev_behind > 0 && behind == 0 {
+                    // Flash green if caught up (both ahead and behind are 0)
+                    if (prev_behind > 0 || prev_ahead > 0) && behind == 0 && ahead == 0 {
                         repo.flash_until = Some(Instant::now() + Duration::from_secs(5));
-                        repo.flash_color = Some(Color::Green);
+                        repo.flash_color = Some(flash_green_color);
+                        
+                        // Add console message about being up to date
+                        let mut console_guard = console_messages.lock().unwrap();
+                        console_guard.push(ConsoleMessage {
+                            timestamp: Utc::now(),
+                            repo: repo.name.clone(),
+                            author: "Git Monitor".to_string(),
+                            message: "Repository is now up to date! 🎉".to_string(),
+                        });
                     }
                     
                     // Add console message for new commits
@@ -412,8 +513,39 @@ fn ui(f: &mut Frame, app: &mut App) {
     for repo in repos.iter() {
         let style = if let Some(flash_until) = repo.flash_until {
             if now < flash_until {
-                Style::default().fg(repo.flash_color.unwrap_or(Color::White))
-                    .add_modifier(Modifier::BOLD)
+                let flash_color = repo.flash_color.unwrap_or(Color::White);
+                
+                // Calculate fade intensity based on time remaining
+                let total_duration = match flash_color {
+                    Color::Green | Color::LightGreen => Duration::from_secs(5),
+                    _ => Duration::from_secs(30),
+                };
+                
+                let time_remaining = flash_until.saturating_duration_since(now);
+                let fade_ratio = time_remaining.as_secs_f32() / total_duration.as_secs_f32();
+                
+                // Create fading effect
+                if fade_ratio > 0.8 {
+                    // Very bright - full color + bold + blink
+                    Style::default()
+                        .fg(flash_color)
+                        .add_modifier(Modifier::BOLD)
+                        .add_modifier(Modifier::RAPID_BLINK)
+                } else if fade_ratio > 0.6 {
+                    // Bright - full color + bold
+                    Style::default()
+                        .fg(flash_color)
+                        .add_modifier(Modifier::BOLD)
+                } else if fade_ratio > 0.4 {
+                    // Medium - full color
+                    Style::default().fg(flash_color)
+                } else if fade_ratio > 0.2 {
+                    // Dim - subtle highlight
+                    Style::default().add_modifier(Modifier::UNDERLINED)
+                } else {
+                    // Very dim - just slight highlight
+                    Style::default().add_modifier(Modifier::DIM)
+                }
             } else {
                 Style::default()
             }
@@ -421,10 +553,31 @@ fn ui(f: &mut Frame, app: &mut App) {
             Style::default()
         };
         
+        // Create cells with color coding for ahead/behind
+        let ahead_color = app.colors.ahead_color.as_ref()
+            .map(|c| parse_color(c))
+            .unwrap_or(Color::Reset);
+        
+        let behind_color = app.colors.behind_color.as_ref()
+            .map(|c| parse_color(c))
+            .unwrap_or(Color::Reset);
+            
+        let ahead_cell = if repo.ahead > 0 {
+            Cell::from(format!("↑{}", repo.ahead)).style(Style::default().fg(ahead_color))
+        } else {
+            Cell::from("0")
+        };
+        
+        let behind_cell = if repo.behind > 0 {
+            Cell::from(format!("↓{}", repo.behind)).style(Style::default().fg(behind_color))
+        } else {
+            Cell::from("0")
+        };
+        
         rows.push(Row::new(vec![
             Cell::from(repo.name.clone()),
-            Cell::from(repo.ahead.to_string()),
-            Cell::from(repo.behind.to_string()),
+            ahead_cell,
+            behind_cell,
             Cell::from(repo.current_branch.clone()),
         ]).style(style));
         
@@ -485,10 +638,18 @@ fn ui(f: &mut Frame, app: &mut App) {
 }
 
 async fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App, refresh_interval: Duration) -> Result<()> {
+    // Get flash colors from app
+    let flash_red_color = app.colors.flash_red_color.as_ref()
+        .map(|c| parse_color(c))
+        .unwrap_or(Color::Red);
+    let flash_green_color = app.colors.flash_green_color.as_ref()
+        .map(|c| parse_color(c))
+        .unwrap_or(Color::Green);
+    
     // Start monitoring task
     let repos_clone = app.repos.clone();
     let console_clone = app.console_messages.clone();
-    tokio::spawn(monitor_repositories(repos_clone, console_clone, refresh_interval));
+    tokio::spawn(monitor_repositories(repos_clone, console_clone, refresh_interval, flash_red_color, flash_green_color));
     
     // UI loop
     let mut last_tick = Instant::now();
