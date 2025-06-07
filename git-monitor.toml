@@ -1,0 +1,14 @@
+# Git Monitor Configuration
+refresh_interval = 5  # seconds between git status checks
+max_commits = 5
+
+[[repositories]]
+name = "My Configs"
+path = "/home/alantokarsky/src/config"
+remote = "origin"
+
+[[repositories]]
+name = "git-montitor"
+path = "~/src/git-monitor"
+remote = "origin"
+
