@@ -42,6 +42,7 @@ struct RepoStatus {
     path: PathBuf,
     ahead: usize,
     behind: usize,
+    current_branch: String,
     last_update: Instant,
     flash_until: Option<Instant>,
     flash_color: Option<Color>,
@@ -54,6 +55,7 @@ struct CommitInfo {
     hash: String,
     author: String,
     message: String,
+    branch: String,
     timestamp: DateTime<Utc>,
 }
 
@@ -83,6 +85,7 @@ impl App {
                 path: expand_path(&repo_config.path),
                 ahead: 0,
                 behind: 0,
+                current_branch: "unknown".to_string(),
                 last_update: Instant::now(),
                 flash_until: None,
                 flash_color: None,
@@ -257,38 +260,45 @@ fn load_config() -> Result<Config> {
     }
 }
 
-fn get_repo_status(path: &PathBuf, remote: &str) -> Result<(usize, usize)> {
+fn get_repo_status(path: &PathBuf, remote: &str) -> Result<(usize, usize, String)> {
     let repo = Repository::open(path)?;
+    
+    // Get current branch
+    let head = repo.head()?;
+    let current_branch = head.shorthand().unwrap_or("unknown").to_string();
     
     // Try to fetch from remote (ignore errors for offline/network issues)
     if let Ok(mut remote_ref) = repo.find_remote(remote) {
         let _ = remote_ref.fetch(&[] as &[&str], None, None);
     }
     
-    // Get local and remote branches
-    let head = repo.head()?;
-    let local_branch = head.shorthand().unwrap_or("main");
-    let remote_branch = format!("{}/{}", remote, local_branch);
-    
     let local_oid = head.target().unwrap();
+    let remote_branch = format!("{}/{}", remote, current_branch);
     
     // Try to find remote branch, if it doesn't exist, assume 0 ahead/behind
     if let Ok(remote_ref) = repo.find_reference(&format!("refs/remotes/{}", remote_branch)) {
         if let Some(remote_oid) = remote_ref.target() {
             // Calculate ahead/behind
             let (ahead, behind) = repo.graph_ahead_behind(local_oid, remote_oid)?;
-            return Ok((ahead, behind));
+            return Ok((ahead, behind, current_branch));
         }
     }
     
     // If no remote branch found, just return 0/0
-    Ok((0, 0))
+    Ok((0, 0, current_branch))
 }
 
 fn get_recent_commits(path: &PathBuf, count: usize) -> Vec<CommitInfo> {
     let mut commits = Vec::new();
     
     if let Ok(repo) = Repository::open(path) {
+        // Get current branch name
+        let current_branch = if let Ok(head) = repo.head() {
+            head.shorthand().unwrap_or("unknown").to_string()
+        } else {
+            "unknown".to_string()
+        };
+        
         if let Ok(mut revwalk) = repo.revwalk() {
             revwalk.push_head().ok();
             
@@ -301,6 +311,7 @@ fn get_recent_commits(path: &PathBuf, count: usize) -> Vec<CommitInfo> {
                             hash: format!("{:.8}", oid),
                             author: commit.author().name().unwrap_or("Unknown").to_string(),
                             message: commit.message().unwrap_or("No message").lines().next().unwrap_or("").to_string(),
+                            branch: current_branch.clone(),
                             timestamp: DateTime::from_timestamp(commit.time().seconds(), 0)
                                 .unwrap_or_else(|| Utc::now()),
                         });
@@ -331,12 +342,13 @@ async fn monitor_repositories(
             repo.last_update = Instant::now();
             
             match get_repo_status(&repo.path, remote) {
-                Ok((ahead, behind)) => {
+                Ok((ahead, behind, branch)) => {
                     let prev_ahead = repo.ahead;
                     let prev_behind = repo.behind;
                     
                     repo.ahead = ahead;
                     repo.behind = behind;
+                    repo.current_branch = branch;
                     
                     // Flash red if new commits behind
                     if behind > prev_behind {
@@ -389,7 +401,7 @@ fn ui(f: &mut Frame, app: &mut App) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .margin(1)
-        .constraints([Constraint::Min(0), Constraint::Length(6), Constraint::Length(3)].as_ref())
+        .constraints([Constraint::Min(0), Constraint::Length(10), Constraint::Length(3)].as_ref())
         .split(f.size());
 
     // Repository table
@@ -413,6 +425,7 @@ fn ui(f: &mut Frame, app: &mut App) {
             Cell::from(repo.name.clone()),
             Cell::from(repo.ahead.to_string()),
             Cell::from(repo.behind.to_string()),
+            Cell::from(repo.current_branch.clone()),
         ]).style(style));
         
         // Add expanded commits if selected
@@ -422,21 +435,21 @@ fn ui(f: &mut Frame, app: &mut App) {
                     Cell::from(format!("  └─ {} - {}", commit.hash, commit.message)),
                     Cell::from(commit.author.clone()),
                     Cell::from(""),
+                    Cell::from(format!("({})", commit.branch)),
                 ]).style(Style::default().fg(Color::Gray)));
             }
         }
     }
     
     let widths = [
-        Constraint::Percentage(50),
-        Constraint::Percentage(25),
-        Constraint::Percentage(25),
+        Constraint::Percentage(35),
+        Constraint::Percentage(15),
+        Constraint::Percentage(15),
+        Constraint::Percentage(35),
     ];
     
     let table = Table::new(rows, widths)
         .block(Block::default().title("Git Repositories").borders(Borders::ALL))
-        .header(Row::new(vec!["Repository", "Ahead", "Behind"])
-            .style(Style::default().add_modifier(Modifier::BOLD)))
         .highlight_style(Style::default().add_modifier(Modifier::REVERSED));
     
     f.render_stateful_widget(table, chunks[0], &mut app.table_state);
@@ -446,7 +459,7 @@ fn ui(f: &mut Frame, app: &mut App) {
     let console_text = console_messages
         .iter()
         .rev()
-        .take(4)
+        .take(8)
         .map(|msg| format!("[{}] {}: {} - {}", 
             msg.timestamp.format("%H:%M:%S"),
             msg.repo,
