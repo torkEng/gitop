@@ -29,10 +29,10 @@ source ~/.cargo/env
 
 ```bash
 # Install latest version from GitLab
-cargo install --git https://gitlab.com/yourusername/gitop.git
+cargo install --git https://gitlab.torkeng.xyz/torkeng/gitop.git
 
 # Or install a specific version
-cargo install --git https://gitlab.com/yourusername/gitop.git --tag v0.1.0
+cargo install --git https://gitlab.torkeng.xyz/torkeng/gitop.git --tag v0.1.0
 ```
 
 ### Verify Installation
@@ -46,7 +46,7 @@ gitop
 ### Update GitOp
 ```bash
 # Update to latest version
-cargo install --git https://gitlab.com/yourusername/gitop.git --force
+cargo install --git https://gitlab.torkeng.xyz/torkeng/gitop.git --force
 ```
 
 ### Uninstall
