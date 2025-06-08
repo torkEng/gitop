@@ -2,8 +2,6 @@
 
 A terminal-based git repository monitor with real-time status updates. Monitor multiple git repositories simultaneously in a clean, vim-like interface.
 
-![GitOp Screenshot](screenshot.png)
-
 ## Features
 
 - **Real-time monitoring** of multiple git repositories
