@@ -2,6 +2,8 @@
 
 A terminal-based git repository monitor with real-time status updates. Monitor multiple git repositories simultaneously in a clean, vim-like interface.
 
+![GitOp Screenshot](screenshot.png)
+
 ## Features
 
 - **Real-time monitoring** of multiple git repositories
@@ -35,9 +37,13 @@ cargo install --git https://gitlab.torkeng.xyz/torkeng/gitop.git --tag v0.1.0
 
 ### Verify Installation
 ```bash
-# Check it's installed
-gitop --help
-# or just run
+# Check it's installed and see help
+gitop -h
+
+# Create initial config
+gitop init
+
+# Run GitOp
 gitop
 ```
 
@@ -54,38 +60,74 @@ cargo uninstall gitop
 
 ## Usage
 
-### Basic Usage
+### Quick Start
 
 ```bash
-# Start monitoring current directory
-gitop
+# 1. Create your config file
+gitop init
 
-# The tool will create a default config if none exists
+# 2. Edit the config to add your repositories
+gitop config    # Shows config file location
+
+# 3. Run GitOp
+gitop
+```
+
+### Command Line Options
+
+```bash
+gitop              # Run the monitor
+gitop -h           # Show help
+gitop -V           # Show version
+gitop init         # Create default config file
+gitop init --force # Overwrite existing config
+gitop config       # Show config file location and status
+gitop -c /path/to/custom/config.toml  # Use custom config file
 ```
 
 ### Configuration
 
-Create `gitop.toml` in your project directory or current working directory:
+GitOp uses a global configuration file located at:
+- **Linux/macOS:** `~/.config/gitop/gitop.toml`
+- **Windows:** `%APPDATA%\gitop\gitop.toml`
 
+Create or edit your config:
+
+```bash
+# Create default config
+gitop init
+
+# Find config location
+gitop config
+
+# Edit config (use your preferred editor)
+nano ~/.config/gitop/gitop.toml
+```
+
+**Example configuration:**
 ```toml
-# GitOp Configuration
-refresh_interval = 5  # seconds between git status checks
-max_commits = 5       # number of commits to show when expanded
+# GitOp Global Configuration
+refresh_interval = 5
+max_commits = 5
 
-# Color Configuration (Optional)
 [colors]
-ahead_color = "yellow"   # Color for ↑ arrows
-behind_color = "cyan"    # Color for ↓ arrows
+ahead_color = "yellow"
+behind_color = "cyan"
 
-# Repository Configuration
+# All your repositories
 [[repositories]]
-name = "My Project"
-path = "/path/to/your/repo"
+name = "Work Project"
+path = "~/work/my-app"
 remote = "origin"
 
 [[repositories]]
-name = "Another Project"
-path = "~/projects/another-repo"
+name = "Personal Website"
+path = "~/projects/website"
+remote = "origin"
+
+[[repositories]]
+name = "Open Source Fork"
+path = "~/forks/awesome-project"
 remote = "upstream"
 ```
 
@@ -175,11 +217,13 @@ remote = "upstream"
 - Verify the path exists and is a git repository
 - Check that the remote exists: `git remote -v`
 - Ensure you have permission to access the repository
+- Use `gitop config` to see your current configuration
 
 ### "Path does not exist"
 - Check the path in your configuration
 - Use absolute paths if relative paths aren't working
 - Ensure tilde (`~`) expansion is working correctly
+- Edit config: see `gitop config` for file location
 
 ### Colors not working
 - Verify your terminal supports colors
@@ -191,13 +235,30 @@ remote = "upstream"
 - Restart your terminal after installing Rust
 - Check installation: `ls ~/.cargo/bin/gitop`
 
+### Config file issues
+```bash
+# See where config should be
+gitop config
+
+# Create fresh config
+gitop init --force
+
+# Use custom config file
+gitop -c /path/to/my/config.toml
+```
+
+### No repositories showing up
+- Run `gitop config` to see configured repositories
+- Check that paths in config file are correct
+- Ensure repositories have the specified remotes
+
 ## Building from Source
 
 If you want to build locally instead of installing:
 
 ```bash
 # Clone the repository
-git clone https://gitlab.com/yourusername/gitop.git
+git clone https://gitlab.torkeng.xyz/torkeng/gitop.git
 cd gitop
 
 # Build and run

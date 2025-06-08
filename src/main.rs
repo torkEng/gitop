@@ -1,5 +1,6 @@
 use anyhow::Result;
 use chrono::{DateTime, Utc};
+use clap::{Parser, Subcommand};
 use crossterm::{
     event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode},
     execute,
@@ -21,6 +22,32 @@ use std::{
     time::{Duration, Instant},
 };
 use tokio::time;
+
+#[derive(Parser)]
+#[command(name = "gitop")]
+#[command(about = "A terminal-based git repository monitor")]
+#[command(version = "0.1.0")]
+#[command(author = "Your Name <your.email@example.com>")]
+struct Cli {
+    #[command(subcommand)]
+    command: Option<Commands>,
+    
+    /// Path to config file (default: ~/.config/gitop/gitop.toml)
+    #[arg(short, long)]
+    config: Option<PathBuf>,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    /// Initialize a new gitop config file
+    Init {
+        /// Force overwrite existing config
+        #[arg(short, long)]
+        force: bool,
+    },
+    /// Show the current config file path
+    Config,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct Config {
@@ -285,15 +312,77 @@ impl App {
     }
 }
 
-fn load_config() -> Result<Config> {
-    // Try to load from config file, fallback to default
-    let config_path = "gitop.toml";
+fn get_config_path(custom_path: Option<PathBuf>) -> PathBuf {
+    // Use custom path if provided
+    if let Some(path) = custom_path {
+        return path;
+    }
     
-    if std::path::Path::new(config_path).exists() {
-        let content = std::fs::read_to_string(config_path)?;
+    // Try multiple locations in order of preference:
+    
+    // 1. Current directory (project-specific config) - check but don't prefer
+    let local_config = PathBuf::from("gitop.toml");
+    
+    // 2. User config directory (Linux: ~/.config/gitop/gitop.toml)
+    if let Some(config_dir) = std::env::var_os("XDG_CONFIG_HOME")
+        .map(PathBuf::from)
+        .or_else(|| {
+            std::env::var_os("HOME").map(|home| {
+                let mut path = PathBuf::from(home);
+                path.push(".config");
+                path
+            })
+        })
+    {
+        let user_config = config_dir.join("gitop").join("gitop.toml");
+        
+        // Prefer global config, but fall back to local if global doesn't exist and local does
+        if user_config.exists() || !local_config.exists() {
+            return user_config;
+        }
+    }
+    
+    // 3. Fallback to current directory
+    local_config
+}
+
+fn create_default_config(config_path: &PathBuf) -> Result<()> {
+    // Create parent directory if it doesn't exist
+    if let Some(parent) = config_path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    
+    let default_config = Config {
+        repositories: vec![
+            RepoConfig {
+                name: "Current Directory".to_string(),
+                path: ".".to_string(),
+                remote: Some("origin".to_string()),
+            }
+        ],
+        refresh_interval: 5,
+        max_commits: 5,
+        colors: Some(ColorConfig {
+            ahead_color: Some("yellow".to_string()),
+            behind_color: Some("cyan".to_string()),
+        }),
+    };
+    
+    let config_content = toml::to_string_pretty(&default_config)?;
+    std::fs::write(config_path, config_content)?;
+    
+    println!("Created default config at: {}", config_path.display());
+    Ok(())
+}
+
+fn load_config(config_path: Option<PathBuf>) -> Result<Config> {
+    let config_path = get_config_path(config_path);
+    
+    if config_path.exists() {
+        let content = std::fs::read_to_string(&config_path)?;
         Ok(toml::from_str(&content)?)
     } else {
-        // Default config
+        // Return default config without creating file
         Ok(Config {
             repositories: vec![
                 RepoConfig {
@@ -616,8 +705,47 @@ async fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App, refresh_i
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    let cli = Cli::parse();
+    
+    // Handle subcommands
+    match cli.command {
+        Some(Commands::Init { force }) => {
+            let config_path = get_config_path(cli.config.clone());
+            
+            if config_path.exists() && !force {
+                eprintln!("Config file already exists at: {}", config_path.display());
+                eprintln!("Use --force to overwrite");
+                std::process::exit(1);
+            }
+            
+            create_default_config(&config_path)?;
+            println!("\nTo start monitoring, run: gitop");
+            println!("To edit config: {}", config_path.display());
+            return Ok(());
+        }
+        Some(Commands::Config) => {
+            let config_path = get_config_path(cli.config.clone());
+            println!("Config file location: {}", config_path.display());
+            println!("Exists: {}", config_path.exists());
+            
+            if config_path.exists() {
+                let config = load_config(cli.config)?;
+                println!("Repositories configured: {}", config.repositories.len());
+                for repo in &config.repositories {
+                    println!("  - {} ({})", repo.name, repo.path);
+                }
+            } else {
+                println!("No config file found. Run 'gitop init' to create one.");
+            }
+            return Ok(());
+        }
+        None => {
+            // Default behavior - run the monitor
+        }
+    }
+    
     // Load configuration
-    let config = load_config()?;
+    let config = load_config(cli.config)?;
     let refresh_interval = Duration::from_secs(config.refresh_interval);
     
     // Setup terminal
