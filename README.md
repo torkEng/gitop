@@ -1,4 +1,4 @@
-# GitOp
+# GiTop
 
 A terminal-based git repository monitor with real-time status updates. Monitor multiple git repositories simultaneously.
 
@@ -14,7 +14,7 @@ A terminal-based git repository monitor with real-time status updates. Monitor m
 ## Installation
 
 ### Prerequisites
-GitOp requires Rust to be installed. If you don't have Rust:
+GiTop requires Rust to be installed. If you don't have Rust:
 
 ```bash
 # Install Rust (one-time setup)
@@ -22,10 +22,10 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 source ~/.cargo/env
 ```
 
-### Install GitOp
+### Install GiTop
 
 ```bash
-# Install latest version from GitLab
+# Install latest version from Github
 cargo install --git https://github.com/torkEng/gitop.git
 
 # Or install a specific version
@@ -40,11 +40,11 @@ gitop -h
 # Create initial config
 gitop init
 
-# Run GitOp
+# Run GiTop
 gitop
 ```
 
-### Update GitOp
+### Update Gitop
 ```bash
 # Update to latest version
 cargo install --git https://github.com/torkEng/gitop.git --force
@@ -84,7 +84,7 @@ gitop -c /path/to/custom/config.toml  # Use custom config file
 
 ### Configuration
 
-GitOp uses a global configuration file located at:
+GiTop uses a global configuration file located at:
 - **Linux/macOS:** `~/.config/gitop/gitop.toml`
 - **Windows:** `%APPDATA%\gitop\gitop.toml`
 
@@ -136,7 +136,7 @@ remote = "upstream"
 
 ### Path Configuration
 
-GitOp supports various path formats:
+GiTop supports various path formats:
 
 - **Relative**: `"."` (current directory)
 - **Absolute**: `"/home/user/projects/repo"`
@@ -280,7 +280,7 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 ## Changelog
 
-### v0.1.0
+### v0.1.2
 - Initial release
 - Real-time git repository monitoring
 - Configurable colors and refresh intervals
