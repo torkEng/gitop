@@ -1,6 +1,6 @@
 # GitOp
 
-A terminal-based git repository monitor with real-time status updates. Monitor multiple git repositories simultaneousl.
+A terminal-based git repository monitor with real-time status updates. Monitor multiple git repositories simultaneously.
 
 ## Features
 
